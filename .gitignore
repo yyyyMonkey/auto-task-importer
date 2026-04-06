@@ -31,3 +31,6 @@ TestResults/
 *.trx
 *.coverage
 *.coveragexml
+
+# Kiro IDE internal config
+.kiro/**/.config.kiro
