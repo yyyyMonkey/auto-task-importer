@@ -51,6 +51,7 @@ public class MainViewModel : ViewModelBase
         LogoutCommand = new RelayCommand(ExecuteLogout, () => _isAuthenticated);
         FetchEventsCommand = new RelayCommand(async () => await ExecuteFetchEventsAsync(), CanFetchEvents);
         LoadIcsCommand = new RelayCommand(ExecuteLoadIcs, () => _isAuthenticated);
+        LoadCsvCommand = new RelayCommand(ExecuteLoadCsv, () => _isAuthenticated);
         SelectAllCommand = new RelayCommand(ExecuteSelectAll, () => _isAuthenticated && CalendarEvents.Any(e => e.IsSelectable));
         DeselectAllCommand = new RelayCommand(ExecuteDeselectAll, () => CalendarEvents.Any(e => e.IsSelected));
         ConfirmCommand = new RelayCommand(async () => await ExecuteConfirmAsync(), () => CanConfirm);
@@ -117,6 +118,7 @@ public class MainViewModel : ViewModelBase
             LogoutCommand.RaiseCanExecuteChanged();
             FetchEventsCommand.RaiseCanExecuteChanged();
             LoadIcsCommand.RaiseCanExecuteChanged();
+            LoadCsvCommand.RaiseCanExecuteChanged();
             SelectAllCommand.RaiseCanExecuteChanged();
         }
     }
@@ -237,6 +239,7 @@ public class MainViewModel : ViewModelBase
     public RelayCommand LogoutCommand { get; }
     public RelayCommand FetchEventsCommand { get; }
     public RelayCommand LoadIcsCommand { get; }
+    public RelayCommand LoadCsvCommand { get; }
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand DeselectAllCommand { get; }
     public RelayCommand ConfirmCommand { get; }
@@ -428,6 +431,58 @@ public class MainViewModel : ViewModelBase
 
     // 通知 View 開啟 ICS 檔案對話框
     public event Action? RequestOpenIcsFile;
+
+    private void ExecuteLoadCsv()
+    {
+        RequestOpenCsvFile?.Invoke();
+    }
+
+    /// <summary>由 View 呼叫，傳入使用者選擇的 CSV 檔案路徑</summary>
+    public void LoadCsvFile(string filePath)
+    {
+        try
+        {
+            var events = CsvParser.Parse(filePath);
+
+            // 套用日期篩選
+            var filtered = events
+                .Where(e => (!_startDate.HasValue || e.StartTime.Date >= _startDate.Value.Date)
+                         && (!_endDate.HasValue || e.StartTime.Date <= _endDate.Value.Date))
+                .ToList();
+
+            CalendarEvents.Clear();
+            foreach (var evt in filtered)
+            {
+                var vm = new CalendarEventViewModel(evt);
+                vm.SelectionChanged += () =>
+                {
+                    ConfirmCommand.RaiseCanExecuteChanged();
+                    DeselectAllCommand.RaiseCanExecuteChanged();
+                };
+                CalendarEvents.Add(vm);
+            }
+
+            if (_selectedSprint != null)
+                ApplyDuplicateDetection();
+
+            StatusMessage = filtered.Count > 0
+                ? $"已從 CSV 載入 {filtered.Count} 筆會議"
+                : "CSV 檔案中查詢區間內無會議";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"讀取 CSV 失敗：{ex.Message}";
+        }
+        finally
+        {
+            SelectAllCommand.RaiseCanExecuteChanged();
+            DeselectAllCommand.RaiseCanExecuteChanged();
+            ConfirmCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    // 通知 View 開啟 CSV 檔案對話框
+    public event Action? RequestOpenCsvFile;
 
     private async Task LoadTeamsAsync()
     {
@@ -663,6 +718,7 @@ public class MainViewModel : ViewModelBase
         LogoutCommand.RaiseCanExecuteChanged();
         FetchEventsCommand.RaiseCanExecuteChanged();
         LoadIcsCommand.RaiseCanExecuteChanged();
+        LoadCsvCommand.RaiseCanExecuteChanged();
         SelectAllCommand.RaiseCanExecuteChanged();
         DeselectAllCommand.RaiseCanExecuteChanged();
         ConfirmCommand.RaiseCanExecuteChanged();

@@ -25,6 +25,9 @@ public partial class MainWindow : Window
         // 訂閱開啟 ICS 檔案對話框事件
         viewModel.RequestOpenIcsFile += OpenIcsFileDialog;
 
+        // 訂閱開啟 CSV 檔案對話框事件
+        viewModel.RequestOpenCsvFile += OpenCsvFileDialog;
+
         // PasswordBox 需要手動綁定（WPF 安全限制）
         if (PasswordBox != null)
         {
@@ -53,5 +56,18 @@ public partial class MainWindow : Window
 
         if (dialog.ShowDialog() == true)
             _viewModel.LoadIcsFile(dialog.FileName);
+    }
+
+    private void OpenCsvFileDialog()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "選擇 CSV 行事曆檔案",
+            Filter = "CSV 檔案 (*.csv)|*.csv|所有檔案 (*.*)|*.*",
+            DefaultExt = ".csv"
+        };
+
+        if (dialog.ShowDialog() == true)
+            _viewModel.LoadCsvFile(dialog.FileName);
     }
 }

@@ -122,7 +122,8 @@
                     <TextBlock Text="結束日期：" VerticalAlignment="Center" Margin="0,0,4,0"/>
                     <DatePicker SelectedDate="{Binding EndDate}" Width="140" Margin="0,0,12,0"/>
                     <Button Content="取得會議" IsEnabled="False" Width="80" Margin="0,0,8,0"/>
-                    <Button Content="📂 載入 ICS" Command="{Binding LoadIcsCommand}" Width="90" Margin="0,0,0,0"/>
+                    <Button Content="📂 載入 ICS" Command="{Binding LoadIcsCommand}" Width="90" Margin="0,0,8,0"/>
+                    <Button Content="📊 載入 CSV" Command="{Binding LoadCsvCommand}" Width="90" Margin="0,0,0,0"/>
                     <TextBlock Text="{Binding DateValidationError}" Foreground="Red"
                                VerticalAlignment="Center" Margin="12,0,0,0"
                                Visibility="{Binding DateValidationError, Converter={StaticResource BoolToVisibility}}"/>
