@@ -52,6 +52,7 @@ public class MainViewModel : ViewModelBase
         FetchEventsCommand = new RelayCommand(async () => await ExecuteFetchEventsAsync(), CanFetchEvents);
         LoadIcsCommand = new RelayCommand(ExecuteLoadIcs, () => _isAuthenticated);
         LoadCsvCommand = new RelayCommand(ExecuteLoadCsv, () => _isAuthenticated);
+        LoadCsvCommand = new RelayCommand(ExecuteLoadCsv, () => _isAuthenticated);
         SelectAllCommand = new RelayCommand(ExecuteSelectAll, () => _isAuthenticated && CalendarEvents.Any(e => e.IsSelectable));
         DeselectAllCommand = new RelayCommand(ExecuteDeselectAll, () => CalendarEvents.Any(e => e.IsSelected));
         ConfirmCommand = new RelayCommand(async () => await ExecuteConfirmAsync(), () => CanConfirm);
@@ -239,6 +240,7 @@ public class MainViewModel : ViewModelBase
     public RelayCommand LogoutCommand { get; }
     public RelayCommand FetchEventsCommand { get; }
     public RelayCommand LoadIcsCommand { get; }
+    public RelayCommand LoadCsvCommand { get; }
     public RelayCommand LoadCsvCommand { get; }
     public RelayCommand SelectAllCommand { get; }
     public RelayCommand DeselectAllCommand { get; }
@@ -443,12 +445,16 @@ public class MainViewModel : ViewModelBase
         try
         {
             var events = CsvParser.Parse(filePath);
+            System.Diagnostics.Debug.WriteLine($"[LoadCsvFile] 解析完成，共 {events.Count} 筆，日期篩選：{_startDate:yyyy/MM/dd} ~ {_endDate:yyyy/MM/dd}");
+            foreach (var e in events)
+                System.Diagnostics.Debug.WriteLine($"[LoadCsvFile]   {e.Subject} | {e.StartTime:yyyy/MM/dd HH:mm} ~ {e.EndTime:yyyy/MM/dd HH:mm}");
 
             // 套用日期篩選
             var filtered = events
                 .Where(e => (!_startDate.HasValue || e.StartTime.Date >= _startDate.Value.Date)
                          && (!_endDate.HasValue || e.StartTime.Date <= _endDate.Value.Date))
                 .ToList();
+            System.Diagnostics.Debug.WriteLine($"[LoadCsvFile] 篩選後剩 {filtered.Count} 筆");
 
             CalendarEvents.Clear();
             foreach (var evt in filtered)
@@ -659,6 +665,8 @@ public class MainViewModel : ViewModelBase
                     ? $"{_authService.CurrentCredential.Domain}\\{_authService.CurrentCredential.UserName}"
                     : $"{Environment.UserDomainName}\\{Environment.UserName}";
                 var durationHours = (vm.EndTime - vm.StartTime).TotalHours;
+                System.Diagnostics.Debug.WriteLine(
+                    $"[CreateTask] {vm.Subject} | Start={vm.StartTime:yyyy/MM/dd HH:mm} End={vm.EndTime:yyyy/MM/dd HH:mm} Duration={durationHours:F2}h");
                 await _tfsClient.CreateTaskAsync(
                     title,
                     _selectedSprint.IterationPath,

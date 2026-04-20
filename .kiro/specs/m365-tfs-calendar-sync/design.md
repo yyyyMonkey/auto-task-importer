@@ -2,9 +2,9 @@
 
 ## 概覽
 
-本工具為一款 Windows 本機桌面應用程式，採用 .NET 8 + WPF + MVVM 架構開發，目的是將本機 `.ics` 行事曆檔案中的會議自動同步為 TFS / Azure DevOps Kanban 看板上的 Task，消除人工重複登錄的時間成本。
+本工具為一款 Windows 本機桌面應用程式，採用 .NET 8 + WPF + MVVM 架構開發，目的是將本機 `.ics` 或 `.csv` 行事曆檔案中的會議自動同步為 TFS / Azure DevOps Kanban 看板上的 Task，消除人工重複登錄的時間成本。
 
-使用者透過公司內部 Windows AD 完成身分驗證後，匯入本機 `.ics` 行事曆檔案，選擇目標 TFS Team / Sprint / Area，系統自動比對重複任務（Levenshtein Distance），並允許使用者選擇性地將會議建立為 TFS Task。
+使用者透過公司內部 Windows AD 完成身分驗證後，匯入本機 `.ics` 或 `.csv` 行事曆檔案，選擇目標 TFS Team / Sprint / Area，系統自動比對重複任務（Levenshtein Distance），並允許使用者選擇性地將會議建立為 TFS Task。
 
 ---
 
@@ -23,8 +23,8 @@
 │                                     │                       │
 │                      ┌──────────────▼───────────────────┐  │
 │                      │          Services Layer           │  │
-│                      │  AuthService / IcsParser /        │  │
-│                      │  TfsClient / DuplicateDetector    │  │
+│                      │  AuthService / IcsParser / CsvParser /  │  │
+│                      │  TfsClient / DuplicateDetector          │  │
 │                      └──────────────┬───────────────────┘  │
 │                                     │                       │
 │                      ┌──────────────▼───────────────────┐  │
@@ -36,8 +36,8 @@
 └─────────────────────────────────────────────────────────────┘
          │                          │
          ▼                          ▼
-  本機 .ics 檔案              TFS REST API /
-  （IcsParser 解析）    Microsoft.TeamFoundationServer.Client
+  本機 .ics / .csv 檔案       TFS REST API /
+  （IcsParser / CsvParser）  Microsoft.TeamFoundationServer.Client
 ```
 
 ### 專案結構
@@ -73,6 +73,7 @@ M365TfsSync/
 │   ├── AuthService.cs
 │   ├── GraphClient.cs              # 保留實作（未來擴充用）
 │   ├── IcsParser.cs                # 本機 .ics 檔案解析器
+│   ├── CsvParser.cs                # 本機 .csv 檔案解析器（Outlook 中文版匯出）
 │   ├── TfsClient.cs
 │   ├── DuplicateDetector.cs
 │   ├── LevenshteinDistance.cs      # 字串相似度演算法
@@ -111,7 +112,7 @@ M365TfsSync/
 │ └─────────────────────────────────────────────────────────────┘ │
 │ ┌─── 查詢條件區 ──────────────────────────────────────────────┐ │
 │ │ Team: [ComboBox ▼]  Sprint: [ComboBox ▼]  Area: [ComboBox ▼]│ │
-│ │ 開始日期: [DatePicker]  結束日期: [DatePicker]  [載入 ICS]  │ │
+│ │ 開始日期: [DatePicker]  結束日期: [DatePicker]  [載入 ICS] [載入 CSV]│ │
 │ └─────────────────────────────────────────────────────────────┘ │
 │ ┌─── 會議清單區 ──────────────────────────────────────────────┐ │
 │ │ [全選] [全部取消]                          ⟳ 載入中...      │ │
@@ -181,6 +182,7 @@ public abstract class ViewModelBase : INotifyPropertyChanged
 | `LogoutCommand` | 清除憑證並重置狀態 |
 | `FetchEventsCommand` | 呼叫 GraphClient 取得會議（保留，目前停用） |
 | `LoadIcsCommand` | 開啟檔案對話框載入本機 .ics 檔案 |
+| `LoadCsvCommand` | 開啟檔案對話框載入本機 .csv 檔案（Outlook 中文版匯出） |
 | `SelectAllCommand` | 全選未重複的會議 |
 | `DeselectAllCommand` | 全部取消勾選 |
 | `ConfirmCommand` | 建立 TFS Task |
@@ -329,7 +331,7 @@ public interface IAuthService
 
 ### IGraphClient / GraphClient
 
-介面保留供未來擴充，目前行事曆資料改由本機 `.ics` 檔案提供。
+介面保留供未來擴充，目前行事曆資料改由本機 `.ics` 或 `.csv` 檔案提供。
 
 ### IcsParser（靜態類別）
 
@@ -344,8 +346,24 @@ public static class IcsParser
 - 讀取 `.ics` 檔案，依 RFC 5545 規範解析 `VEVENT` 區塊。
 - 支援折行（Unfold）處理。
 - 解析 `SUMMARY`（主旨）、`UID`、`DTSTART`、`DTEND`。
-- 支援 UTC 時間（尾端 `Z`）自動轉換為本地時間，以及 `TZID` 參數。
+- 支援 UTC 時間（尾端 `Z`）自動轉換為本地時間，以及 `TZID` 參數時區轉換。
 - 解碼 RFC 5545 跳脫字元（`\n`、`\,`、`\;`、`\\`）。
+
+### CsvParser（靜態類別）
+
+```csharp
+public static class CsvParser
+{
+    public static IReadOnlyList<CalendarEvent> Parse(string filePath);
+}
+```
+
+**實作說明：**
+- 支援 Outlook 中文版匯出的 CSV 格式。
+- 自動偵測編碼：UTF-8 BOM 或 Big5（繁體中文 Windows 預設）。
+- 解析欄位：`主旨`、`開始日期`、`開始時間`、`結束日期`、`結束時間`。
+- 時間解析：直接 split 空格取最後一段數字（`hh:mm:ss`），忽略前綴的「上午/下午」中文字，避免編碼問題。
+- 支援引號包覆的 CSV 欄位（RFC 4180）。
 
 ### ITfsClient
 

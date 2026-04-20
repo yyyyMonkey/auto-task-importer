@@ -91,21 +91,47 @@ public static class IcsParser
                 tzid = param[5..];
         }
 
+        System.Diagnostics.Debug.WriteLine($"[IcsParser] propFull={propFull} | raw value={value} | tzid={tzid}");
+
         // 移除尾端 Z（UTC 標記）
         var isUtc = value.EndsWith('Z');
-        var clean = value.TrimEnd('Z').Replace("T", "");
+
+        // 只移除 T 分隔符（位於日期與時間之間的固定位置第 9 個字元）
+        // 避免 Replace("T","") 誤刪其他位置的 T
+        var clean = value.TrimEnd('Z');
+        if (clean.Length >= 9 && clean[8] == 'T')
+            clean = clean[..8] + clean[9..];
+
+        System.Diagnostics.Debug.WriteLine($"[IcsParser] clean={clean} | isUtc={isUtc}");
 
         if (!DateTime.TryParseExact(clean,
             new[] { "yyyyMMddHHmmss", "yyyyMMdd" },
             CultureInfo.InvariantCulture,
             DateTimeStyles.None,
             out var dt))
+        {
+            System.Diagnostics.Debug.WriteLine($"[IcsParser] 解析失敗: clean={clean}");
             return DateTime.MinValue;
+        }
 
         if (isUtc)
             return DateTime.SpecifyKind(dt, DateTimeKind.Utc).ToLocalTime();
 
-        return dt; // 本地時間直接使用
+        // 有 TZID 且是 Windows 時區名稱，嘗試轉換
+        if (!string.IsNullOrEmpty(tzid))
+        {
+            try
+            {
+                var tz = TimeZoneInfo.FindSystemTimeZoneById(tzid.Trim('"'));
+                return TimeZoneInfo.ConvertTimeToUtc(dt, tz).ToLocalTime();
+            }
+            catch
+            {
+                // 找不到時區就直接用原始時間
+            }
+        }
+
+        return dt;
     }
 
     private static string DecodeText(string value)
